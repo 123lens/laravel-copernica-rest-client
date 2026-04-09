@@ -1,0 +1,47 @@
+{
+    "name": "budgetlens/laravel-copernica-rest-client",
+    "description": "A fluent PHP (Laravel) REST client for the Copernica Marketing Software API v4",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "orchestra/testbench": "^9.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Budgetlens\\Copernica\\RestClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Budgetlens\\Copernica\\RestClient\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Budgetlens\\Copernica\\RestClient\\CopernicaServiceProvider"
+            ],
+            "aliases": {
+                "Copernica": "Budgetlens\\Copernica\\RestClient\\Facades\\Copernica"
+            }
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}
