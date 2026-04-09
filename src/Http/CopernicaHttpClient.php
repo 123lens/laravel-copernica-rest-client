@@ -13,22 +13,56 @@ use GuzzleHttp\Exception\GuzzleException;
 
 class CopernicaHttpClient
 {
-    private readonly Client $client;
+    private Client $client;
+    private string $jwt;
+    private int $jwtExpiresAt = 0;
 
     public function __construct(
         private readonly string $accessToken,
-        string $baseUrl = 'https://api.copernica.com/v4',
-        int $timeout = 30,
+        private readonly string $baseUrl = 'https://api.copernica.com/v4',
+        private readonly int $timeout = 30,
+        private readonly string $authUrl = 'https://authenticate.copernica.com',
     ) {
-        $this->client = new Client([
-            'base_uri' => rtrim($baseUrl, '/') . '/',
-            'timeout' => $timeout,
+        $this->jwt = $this->authenticate();
+        $this->client = $this->createClient();
+    }
+
+    private function authenticate(): string
+    {
+        $response = (new Client(['timeout' => $this->timeout]))
+            ->post($this->authUrl, [
+                'form_params' => [
+                    'access_token' => $this->accessToken,
+                ],
+            ]);
+
+        $jwt = $response->getBody()->getContents();
+
+        // JWT is valid for 24 hours, refresh after 23 hours to be safe
+        $this->jwtExpiresAt = time() + (23 * 3600);
+
+        return trim($jwt);
+    }
+
+    private function createClient(): Client
+    {
+        return new Client([
+            'base_uri' => rtrim($this->baseUrl, '/') . '/',
+            'timeout' => $this->timeout,
             'headers' => [
-                'Authorization' => "Bearer {$this->accessToken}",
+                'Authorization' => "Bearer {$this->jwt}",
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ],
         ]);
+    }
+
+    private function ensureAuthenticated(): void
+    {
+        if (time() >= $this->jwtExpiresAt) {
+            $this->jwt = $this->authenticate();
+            $this->client = $this->createClient();
+        }
     }
 
     public function get(string $endpoint, array $query = []): array
@@ -77,6 +111,8 @@ class CopernicaHttpClient
 
     private function request(string $method, string $endpoint, array $options = []): array
     {
+        $this->ensureAuthenticated();
+
         try {
             $response = $this->client->request($method, ltrim($endpoint, '/'), $options);
 
