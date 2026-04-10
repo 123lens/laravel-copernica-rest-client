@@ -62,6 +62,10 @@ abstract class Resource
     {
         $response = $this->http->post($endpoint, $data);
 
+        if (isset($response['_created'])) {
+            return $response['_created'];
+        }
+
         if (isset($response['_location'])) {
             $id = (int) basename($response['_location']);
             if ($id > 0) {

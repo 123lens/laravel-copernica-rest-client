@@ -13,35 +13,23 @@ use GuzzleHttp\Exception\GuzzleException;
 
 class CopernicaHttpClient
 {
-    private Client $client;
-    private string $jwt;
-    private int $jwtExpiresAt = 0;
+    private ?Client $client = null;
+    private ?JSONWebToken $jwt = null;
 
     public function __construct(
         private readonly string $accessToken,
         private readonly string $baseUrl = 'https://api.copernica.com/v4',
         private readonly int $timeout = 30,
         private readonly string $authUrl = 'https://authenticate.copernica.com',
-    ) {
-        $this->jwt = $this->authenticate();
-        $this->client = $this->createClient();
-    }
+    ) {}
 
-    private function authenticate(): string
+    private function refreshJwt(): void
     {
-        $response = (new Client(['timeout' => $this->timeout]))
-            ->post($this->authUrl, [
-                'form_params' => [
-                    'access_token' => $this->accessToken,
-                ],
-            ]);
+        $this->jwt = JSONWebToken::fromServer($this->accessToken, $this->authUrl);
 
-        $jwt = $response->getBody()->getContents();
-
-        // JWT is valid for 24 hours, refresh after 23 hours to be safe
-        $this->jwtExpiresAt = time() + (23 * 3600);
-
-        return trim($jwt);
+        if ($this->jwt === null) {
+            throw new CopernicaException('Failed to obtain JWT from Copernica authentication server.');
+        }
     }
 
     private function createClient(): Client
@@ -50,7 +38,7 @@ class CopernicaHttpClient
             'base_uri' => rtrim($this->baseUrl, '/') . '/',
             'timeout' => $this->timeout,
             'headers' => [
-                'Authorization' => "Bearer {$this->jwt}",
+                'Authorization' => "Bearer {$this->jwt->raw()}",
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ],
@@ -59,10 +47,12 @@ class CopernicaHttpClient
 
     private function ensureAuthenticated(): void
     {
-        if (time() >= $this->jwtExpiresAt) {
-            $this->jwt = $this->authenticate();
-            $this->client = $this->createClient();
+        if ($this->jwt !== null && !$this->jwt->expired()) {
+            return;
         }
+
+        $this->refreshJwt();
+        $this->client = $this->createClient();
     }
 
     public function get(string $endpoint, array $query = []): array
@@ -115,7 +105,6 @@ class CopernicaHttpClient
 
         try {
             $response = $this->client->request($method, ltrim($endpoint, '/'), $options);
-
             $statusCode = $response->getStatusCode();
 
             if ($statusCode === 204) {
@@ -149,6 +138,10 @@ class CopernicaHttpClient
 
         if ($response->hasHeader('X-deleted')) {
             $headers['_deleted'] = $response->getHeader('X-deleted')[0];
+        }
+
+        if ($response->hasHeader('X-Created')) {
+            $headers['_created'] = (int) $response->getHeader('X-Created')[0];
         }
 
         return $headers;
